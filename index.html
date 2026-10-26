@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diário de Condução TVDE</title>
+<meta name="description" content="Registo de horas de condução na Uber e na Bolt, com pausas e relatórios.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#EEF1F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1117" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Diário TVDE">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+[hidden] { display: none !important; }
+/* Layout: uma coluna estreita tipo app, cartão de estado no topo, barra de navegação fixa em baixo */
+:root {
+  --bg: #EEF1F5;
+  --surface: #FFFFFF;
+  --surface-2: #F5F7FA;
+  --fg: #121722;
+  --muted: #5A6474;
+  --line: #D9DEE6;
+  --accent: #1F4FD8;       /* azul da faixa da matrícula */
+  --on-accent: #FFFFFF;
+  --uber: #121722;
+  --on-uber: #FFFFFF;
+  --bolt: #0E9A4C;
+  --on-bolt: #FFFFFF;
+  --pausa: #C98204;
+  --on-pausa: #FFFFFF;
+  --danger: #C2362B;
+  --plate-bg: #FFFFFF;
+  --plate-fg: #111111;
+  --font-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1117; --surface: #161B24; --surface-2: #1E2530; --fg: #E8ECF2; --muted: #98A2B3;
+    --line: #2A3240; --accent: #7A9CFF; --on-accent: #0D1117; --uber: #E8ECF2; --on-uber: #0D1117;
+    --bolt: #34C77B; --on-bolt: #06150D; --pausa: #F2B33D; --on-pausa: #1E1503; --danger: #FF6B5E;
+    --plate-bg: #F4F4F0; --plate-fg: #111111;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1117; --surface: #161B24; --surface-2: #1E2530; --fg: #E8ECF2; --muted: #98A2B3;
+  --line: #2A3240; --accent: #7A9CFF; --on-accent: #0D1117; --uber: #E8ECF2; --on-uber: #0D1117;
+  --bolt: #34C77B; --on-bolt: #06150D; --pausa: #F2B33D; --on-pausa: #1E1503; --danger: #FF6B5E;
+  --plate-bg: #F4F4F0; --plate-fg: #111111;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap {
+  max-width: 600px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px calc(96px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 16px;
+}
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15; }
+h2 { font-size: 1.35rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.label {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); font-weight: 600;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Cabeçalho com matrícula */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.who { min-width: 0; }
+.who h1 { font-size: 1.5rem; font-weight: 700; overflow-wrap: anywhere; }
+.plate {
+  display: inline-flex; align-items: stretch; border: 2px solid #111; border-radius: 6px;
+  overflow: hidden; background: var(--plate-bg); color: var(--plate-fg); flex-shrink: 0;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; letter-spacing: .06em;
+}
+.plate .eu {
+  background: #003399; color: #FFDD00; font-size: .62rem; display: grid; place-items: center;
+  padding: 2px 5px; line-height: 1; letter-spacing: 0;
+}
+.plate .eu b { color: #fff; font-size: .8rem; display: block; margin-top: 3px; }
+.plate .txt { padding: 4px 9px; white-space: nowrap; }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px;
+  padding: 8px 12px; font-size: .9rem; font-weight: 600;
+}
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.notice { font-size: .85rem; color: var(--muted); padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+
+/* Estado atual */
+.status { display: grid; gap: 14px; }
+.status-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  font-weight: 700; font-family: var(--font-display); font-size: 1rem; letter-spacing: .02em;
+  background: var(--surface-2); color: var(--muted);
+}
+.pill .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.pill.uber { background: var(--uber); color: var(--on-uber); }
+.pill.bolt { background: var(--bolt); color: var(--on-bolt); }
+.pill.pausa { background: var(--pausa); color: var(--on-pausa); }
+.pill.live .dot { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.clock { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.8rem, 13vw, 4rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.sub { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: .92rem; }
+
+.limit { display: grid; gap: 6px; }
+.limit-row { display: flex; justify-content: space-between; font-size: .85rem; gap: 8px; }
+.meter { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; display: flex; }
+.meter span { display: block; height: 100%; }
+.meter .m-uber { background: var(--uber); }
+.meter .m-bolt { background: var(--bolt); }
+.limit.over .limit-row b { color: var(--danger); }
+
+/* Botões principais */
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.big {
+  border: 0; border-radius: var(--radius); padding: 18px 12px; min-height: 84px;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.45rem; letter-spacing: .02em;
+  display: grid; place-items: center; gap: 2px; text-align: center;
+  transition: transform .08s ease;
+}
+.big small { font-family: var(--font-body); font-weight: 500; font-size: .78rem; letter-spacing: 0; opacity: .85; }
+.big:active { transform: scale(.98); }
+.big.uber { background: var(--uber); color: var(--on-uber); }
+.big.bolt { background: var(--bolt); color: var(--on-bolt); }
+.big.pausa { background: var(--surface); color: var(--pausa); border: 2px solid var(--pausa); }
+.big.fim { background: var(--surface); color: var(--fg); border: 2px solid var(--line); }
+.big.fim.armed { border-color: var(--danger); color: var(--danger); }
+.big[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 3px; }
+.big[disabled] { opacity: .45; cursor: default; }
+
+/* Linha do tempo do dia */
+.timeline { position: relative; height: 26px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.timeline i { position: absolute; top: 0; bottom: 0; }
+.tl-ticks { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); margin-top: 4px; }
+.t-uber { background: var(--uber); }
+.t-bolt { background: var(--bolt); }
+.t-pausa { background: var(--pausa); }
+
+.seg-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.seg-list li { display: grid; grid-template-columns: 12px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: .95rem; }
+.seg-list li:first-child { border-top: 0; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.del { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 4px 9px; font-size: .8rem; color: var(--muted); }
+.del.armed { border-color: var(--danger); color: var(--danger); font-weight: 600; }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Relatório */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px; font-weight: 600; font-size: .9rem; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tot { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; }
+.tot .v { font-family: var(--font-display); font-weight: 700; font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tot.main { grid-column: 1 / -1; }
+.tot.main .v { font-size: 2.2rem; }
+.tot .k { display: flex; align-items: center; gap: 6px; }
+.tot .x { font-size: .85rem; color: var(--muted); }
+.chart-box { overflow-x: auto; }
+.chart-box svg { display: block; width: 100%; height: auto; min-width: 280px; }
+.tbl-box { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .86rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 9px 4px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+tr.day { cursor: pointer; }
+tr.day:hover td { background: var(--surface-2); }
+tr.detail td { background: var(--surface-2); text-align: left; padding: 6px 10px; white-space: normal; }
+tfoot td { font-weight: 700; border-bottom: 0; }
+.row-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 14px; font-weight: 600; }
+.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+/* Formulários */
+form { display: grid; gap: 12px; }
+.field { display: grid; gap: 5px; }
+.field label { font-weight: 600; font-size: .9rem; }
+.field input, .field select {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 11px 12px; width: 100%;
+  min-width: 0; font-size: 1rem;
+}
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.err { color: var(--danger); font-size: .85rem; }
+
+/* Navegação inferior */
+.nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: 8px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+.nav-in { max-width: 600px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.nav button {
+  border: 0; background: transparent; border-radius: 10px; padding: 10px 4px; font-weight: 700;
+  font-family: var(--font-display); font-size: 1.05rem; color: var(--muted); letter-spacing: .02em;
+}
+.nav button[aria-current="page"] { background: var(--surface-2); color: var(--accent); }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 6;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .9rem;
+  max-width: calc(100% - 32px); text-align: center;
+}
+@media (min-width: 560px) {
+  .totals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill.live .dot { animation: none; }
+  .big { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="who">
+      <p class="label">Diário de condução</p>
+      <h1 id="hdr-nome">Motorista TVDE</h1>
+    </div>
+    <div class="plate" id="hdr-plate" aria-label="Matrícula">
+      <span class="eu">★<b>P</b></span><span class="txt" id="hdr-mat">00-AA-00</span>
+    </div>
+  </header>
+
+  <!-- ===================== TURNO ===================== -->
+  <section id="view-turno" class="wrap-inner" style="display:grid;gap:16px">
+    <div class="card status" id="status-card">
+      <div class="status-head">
+        <span class="pill" id="st-pill"><span class="dot"></span><span id="st-name">Fora de serviço</span></span>
+        <span class="muted" id="st-since"></span>
+      </div>
+      <div class="clock" id="st-clock">0:00:00</div>
+      <div class="sub num" id="st-sub">
+        <span>Toque em Uber ou Bolt para começar o turno.</span>
+      </div>
+      <div class="limit" id="limit-box">
+        <div class="limit-row"><span>Condução em 24 h (máx. 10 h)</span><b class="num" id="limit-txt">0h 00m</b></div>
+        <div class="meter" id="limit-meter" role="img" aria-label="Horas de condução hoje"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="big uber" id="btn-uber" type="button">Uber<small id="btn-uber-s">Começar a rodar</small></button>
+      <button class="big bolt" id="btn-bolt" type="button">Bolt<small id="btn-bolt-s">Começar a rodar</small></button>
+      <button class="big pausa" id="btn-pausa" type="button">Pausa<small>Descanso</small></button>
+      <button class="big fim" id="btn-fim" type="button">Terminar<small id="btn-fim-s">Fechar o turno</small></button>
+    </div>
+
+    <div class="card" style="display:grid;gap:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <h2>Hoje</h2><span class="muted num" id="today-date"></span>
+      </div>
+      <div>
+        <div class="timeline" id="tl" role="img" aria-label="Linha do tempo de hoje"></div>
+        <div class="tl-ticks num"><span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span></div>
+      </div>
+      <div class="legend">
+        <span><i class="sw t-uber"></i>Uber <b class="num" id="lg-uber">0h 00m</b></span>
+        <span><i class="sw t-bolt"></i>Bolt <b class="num" id="lg-bolt">0h 00m</b></span>
+        <span><i class="sw t-pausa"></i>Pausa <b class="num" id="lg-pausa">0h 00m</b></span>
+      </div>
+      <ul class="seg-list" id="today-list"></ul>
+      <p class="muted" id="today-empty">Ainda não há registos hoje. Os períodos aparecem aqui assim que começar.</p>
+    </div>
+  </section>
+
+  <!-- ===================== RELATÓRIO ===================== -->
+  <section id="view-rel" hidden style="display:grid;gap:16px">
+    <div style="display:grid;gap:10px">
+      <h2>Relatório</h2>
+      <div class="chips" role="group" aria-label="Período">
+        <button class="chip" type="button" data-per="hoje">Hoje</button>
+        <button class="chip" type="button" data-per="semana">Esta semana</button>
+        <button class="chip" type="button" data-per="mes">Este mês</button>
+        <button class="chip" type="button" data-per="mesant">Mês anterior</button>
+      </div>
+      <p class="muted num" id="rel-range"></p>
+    </div>
+
+    <div class="totals" id="rel-totals"></div>
+
+    <div class="card" style="display:grid;gap:10px">
+      <h3>Horas por dia</h3>
+      <div class="chart-box" id="rel-chart"></div>
+      <div class="legend">
+        <span><i class="sw t-uber"></i>Uber</span>
+        <span><i class="sw t-bolt"></i>Bolt</span>
+        <span><i class="sw t-pausa"></i>Pausa</span>
+      </div>
+    </div>
+
+    <div class="card" style="display:grid;gap:10px">
+      <h3>Detalhe por dia</h3>
+      <p class="muted" style="font-size:.85rem">Toque num dia para ver e apagar períodos.</p>
+      <div class="tbl-box" id="rel-table"></div>
+    </div>
+
+    <div class="row-btns">
+      <button class="btn primary" type="button" id="btn-csv">Exportar CSV</button>
+      <button class="btn" type="button" id="btn-copy">Copiar resumo</button>
+    </div>
+
+    <form class="card" id="form-add" autocomplete="off">
+      <h3>Adicionar período esquecido</h3>
+      <div class="field">
+        <label for="add-tipo">Atividade</label>
+        <select id="add-tipo">
+          <option value="uber">Uber</option>
+          <option value="bolt">Bolt</option>
+          <option value="pausa">Pausa</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="add-dia">Dia</label>
+        <input type="date" id="add-dia" required>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="add-ini">Início</label><input type="time" id="add-ini" required></div>
+        <div class="field"><label for="add-fim">Fim</label><input type="time" id="add-fim" required></div>
+      </div>
+      <p class="err" id="add-err" hidden></p>
+      <button class="btn primary" type="submit">Adicionar</button>
+    </form>
+  </section>
+
+  <!-- ===================== PERFIL ===================== -->
+  <section id="view-perfil" hidden style="display:grid;gap:16px">
+    <form class="card" id="form-perfil" autocomplete="off">
+      <h2>Os meus dados</h2>
+      <p class="muted">O nome e a matrícula aparecem no topo e nos relatórios exportados.</p>
+      <div class="field">
+        <label for="pf-nome">Nome</label>
+        <input id="pf-nome" maxlength="60" required placeholder="O seu nome">
+      </div>
+      <div class="field">
+        <label for="pf-mat">Matrícula do carro</label>
+        <input id="pf-mat" maxlength="10" required placeholder="AA-00-AA" style="text-transform:uppercase;letter-spacing:.06em">
+      </div>
+      <p class="err" id="pf-err" hidden></p>
+      <button class="btn primary" type="submit">Guardar</button>
+    </form>
+    <div class="card" style="display:grid;gap:10px">
+      <h3>Cópia de segurança</h3>
+      <p>Os registos ficam guardados só neste aparelho. Faça uma cópia de vez em quando e guarde o ficheiro no Google Drive, no iCloud ou no e-mail. Se trocar de aparelho, use <b>Restaurar</b> para recuperar tudo.</p>
+      <p class="muted num" id="bk-info"></p>
+      <div class="row-btns">
+        <button class="btn primary" type="button" id="btn-backup">Fazer cópia</button>
+        <button class="btn" type="button" id="btn-restore">Restaurar cópia</button>
+        <input type="file" id="file-restore" accept=".json,application/json" hidden>
+      </div>
+    </div>
+    <div class="card" style="display:grid;gap:8px">
+      <h3>Como funciona</h3>
+      <p>Toque em <b>Uber</b> ou <b>Bolt</b> quando estiver ligado na aplicação. Se trocar de aplicação, toque na outra: o tempo passa automaticamente. Use <b>Pausa</b> para descansos e <b>Terminar</b> no fim do dia.</p>
+      <p class="muted">A barra de condução conta o tempo nas duas aplicações juntas, porque a lei do TVDE (Lei 45/2018) limita a condução a 10 horas em cada 24, somando todas as plataformas.</p>
+    </div>
+  </section>
+</div>
+
+<nav class="nav" aria-label="Secções">
+  <div class="nav-in">
+    <button type="button" data-view="turno" aria-current="page">Turno</button>
+    <button type="button" data-view="rel">Relatório</button>
+    <button type="button" data-view="perfil">Perfil</button>
+  </div>
+</nav>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Estado ---------- */
+  var NOMES = { uber: "Uber", bolt: "Bolt", pausa: "Pausa" };
+  var LIMITE_MS = 10 * 3600000;
+  var S = { perfil: null, estado: { atual: null, turno: null }, dias: {} };
+  var LS_KEY = "diario-tvde-v1";
+  var periodo = "semana", abertos = {};
+
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- Datas e formatação ---------- */
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function chaveDia(ms) { var d = new Date(ms); return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function inicioDia(ms) { var d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function proximoDia(ms) { var d = new Date(inicioDia(ms)); d.setDate(d.getDate() + 1); return d.getTime(); }
+  function deChave(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]).getTime(); }
+  function hora(ms) { var d = new Date(ms); return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function dur(ms) { var m = Math.round(Math.max(0, ms) / 60000); return Math.floor(m / 60) + "h " + pad(m % 60) + "m"; }
+  function durCurta(ms) { var m = Math.round(Math.max(0, ms) / 60000); return Math.floor(m / 60) + "h" + pad(m % 60); }
+  function relogio(ms) { var s = Math.floor(Math.max(0, ms) / 1000); return Math.floor(s / 3600) + ":" + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60); }
+  var DIAS_SEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  function dataLonga(ms) { var d = new Date(ms); return DIAS_SEM[d.getDay()] + ", " + d.getDate() + " de " + MESES[d.getMonth()]; }
+  function dataCurta(k) { var d = new Date(deChave(k)); return DIAS_SEM[d.getDay()] + " " + pad(d.getDate()) + "/" + pad(d.getMonth() + 1); }
+
+  /* ---------- Guardar ---------- */
+  function guardarLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
+  function lerLocal() {
+    try {
+      var x = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+      if (x && typeof x === "object") {
+        S.perfil = x.perfil || null;
+        S.estado = x.estado || { atual: null, turno: null };
+        S.dias = x.dias || {};
+      }
+    } catch (e) {}
+  }
+  /* Os registos ficam guardados no próprio aparelho (localStorage). */
+  function escrever() {
+    guardarLocal();
+    return Promise.resolve();
+  }
+  function gravarDia(k) {
+    var seg = S.dias[k];
+    return escrever("d-" + k, seg && seg.length ? { tipo: "dia", data: k, seg: seg } : null);
+  }
+  function gravarEstado() { return escrever("estado", { tipo: "estado", atual: S.estado.atual, turno: S.estado.turno }); }
+
+  /* Fecha um período e reparte-o pela meia-noite, se for preciso */
+  function adicionarPeriodo(a, ini, fim) {
+    var tocados = [];
+    if (fim - ini < 1000) return tocados;
+    while (ini < fim) {
+      var corte = Math.min(fim, proximoDia(ini));
+      var k = chaveDia(ini);
+      (S.dias[k] = S.dias[k] || []).push({ a: a, i: ini, f: corte });
+      S.dias[k].sort(function (x, y) { return x.i - y.i; });
+      if (tocados.indexOf(k) < 0) tocados.push(k);
+      ini = corte;
+    }
+    return tocados;
+  }
+
+  function mudar(nova) {
+    var agora = Date.now();
+    var tocados = [];
+    var at = S.estado.atual;
+    if (at) tocados = adicionarPeriodo(at.a, at.i, agora);
+    if (nova) {
+      S.estado.atual = { a: nova, i: agora };
+      if (!S.estado.turno) S.estado.turno = agora;
+    } else {
+      S.estado.atual = null;
+      S.estado.turno = null;
+    }
+    render();
+    var p = Promise.resolve();
+    tocados.forEach(function (k) { p = p.then(function () { return gravarDia(k); }); });
+    p.then(gravarEstado);
+  }
+
+  /* ---------- Cálculos ---------- */
+  function vazio() { return { uber: 0, bolt: 0, pausa: 0 }; }
+  function totaisDia(k, incluirAtual) {
+    var t = vazio();
+    (S.dias[k] || []).forEach(function (s) { t[s.a] += s.f - s.i; });
+    var at = S.estado.atual;
+    if (incluirAtual && at) {
+      var ini = Math.max(at.i, deChave(k)), fim = Math.min(Date.now(), proximoDia(deChave(k)));
+      if (fim > ini) t[at.a] += fim - ini;
+    }
+    return t;
+  }
+  function periodosDia(k, incluirAtual) {
+    var lista = (S.dias[k] || []).map(function (s, idx) { return { a: s.a, i: s.i, f: s.f, idx: idx }; });
+    var at = S.estado.atual;
+    if (incluirAtual && at && chaveDia(Date.now()) === k) {
+      lista.push({ a: at.a, i: Math.max(at.i, deChave(k)), f: Date.now(), atual: true });
+    }
+    return lista;
+  }
+
+  /* ---------- Render: cabeçalho ---------- */
+  function renderTopo() {
+    $("hdr-nome").textContent = (S.perfil && S.perfil.nome) || "Motorista TVDE";
+    $("hdr-mat").textContent = (S.perfil && S.perfil.matricula) || "00-AA-00";
+    $("hdr-plate").style.opacity = S.perfil && S.perfil.matricula ? "1" : ".45";
+  }
+
+  /* ---------- Render: turno ---------- */
+  function renderTurno() {
+    var at = S.estado.atual, agora = Date.now();
+    var hoje = chaveDia(agora);
+    var pill = $("st-pill");
+    pill.className = "pill" + (at ? " " + at.a + " live" : "");
+    $("st-name").textContent = at ? (at.a === "pausa" ? "Em pausa" : "A rodar na " + NOMES[at.a]) : "Fora de serviço";
+    $("st-since").textContent = at ? "desde as " + hora(at.i) : "";
+    $("st-clock").textContent = relogio(at ? agora - at.i : 0);
+
+    var sub = $("st-sub");
+    sub.textContent = "";
+    if (S.estado.turno) {
+      var a = document.createElement("span"); a.textContent = "Turno iniciado às " + hora(S.estado.turno);
+      var b = document.createElement("span"); b.textContent = "Duração do turno " + dur(agora - S.estado.turno);
+      sub.appendChild(a); sub.appendChild(b);
+    } else {
+      var c = document.createElement("span"); c.textContent = "Toque em Uber ou Bolt para começar o turno.";
+      sub.appendChild(c);
+    }
+
+    // Condução nas últimas 24 horas (as duas plataformas somadas)
+    var desde = agora - 24 * 3600000, cond = { uber: 0, bolt: 0 };
+    [chaveDia(desde), hoje].forEach(function (k, n, arr) {
+      if (n === 1 && arr[0] === k) return;
+      periodosDia(k, true).forEach(function (s) {
+        if (s.a === "pausa") return;
+        var ini = Math.max(s.i, desde);
+        if (s.f > ini) cond[s.a] += s.f - ini;
+      });
+    });
+    var total = cond.uber + cond.bolt;
+    $("limit-txt").textContent = dur(total);
+    $("limit-box").classList.toggle("over", total > LIMITE_MS);
+    var m = $("limit-meter"); m.textContent = "";
+    [["uber", cond.uber], ["bolt", cond.bolt]].forEach(function (p) {
+      var s = document.createElement("span");
+      s.className = "m-" + p[0];
+      s.style.width = Math.min(100, p[1] / LIMITE_MS * 100) + "%";
+      m.appendChild(s);
+    });
+    m.setAttribute("aria-label", "Condução nas últimas 24 horas: " + dur(total) + " de 10 horas");
+
+    // Botões
+    ["uber", "bolt", "pausa"].forEach(function (a) {
+      $("btn-" + a).setAttribute("aria-pressed", at && at.a === a ? "true" : "false");
+    });
+    $("btn-uber-s").textContent = at && at.a === "uber" ? "Ligado agora" : (at ? "Mudar para Uber" : "Começar a rodar");
+    $("btn-bolt-s").textContent = at && at.a === "bolt" ? "Ligado agora" : (at ? "Mudar para Bolt" : "Começar a rodar");
+    $("btn-fim").disabled = !at;
+    if (!at) desarmarFim();
+
+    // Hoje
+    $("today-date").textContent = dataLonga(agora);
+    var t = totaisDia(hoje, true);
+    $("lg-uber").textContent = dur(t.uber);
+    $("lg-bolt").textContent = dur(t.bolt);
+    $("lg-pausa").textContent = dur(t.pausa);
+
+    var tl = $("tl"); tl.textContent = "";
+    var d0 = deChave(hoje), DIA = 86400000;
+    var lista = periodosDia(hoje, true);
+    lista.forEach(function (s) {
+      var i = document.createElement("i");
+      i.className = "t-" + s.a;
+      i.style.left = ((s.i - d0) / DIA * 100) + "%";
+      i.style.width = Math.max(0.3, (s.f - s.i) / DIA * 100) + "%";
+      tl.appendChild(i);
+    });
+
+    var ul = $("today-list"); ul.textContent = "";
+    lista.slice().reverse().forEach(function (s) {
+      var li = document.createElement("li");
+      var sw = document.createElement("i"); sw.className = "sw t-" + s.a;
+      var nm = document.createElement("span"); nm.textContent = NOMES[s.a] + (s.atual ? " (agora)" : "");
+      var hr = document.createElement("span"); hr.className = "num muted"; hr.textContent = hora(s.i) + "–" + (s.atual ? "…" : hora(s.f));
+      var du = document.createElement("b"); du.className = "num"; du.textContent = dur(s.f - s.i);
+      li.appendChild(sw); li.appendChild(nm); li.appendChild(hr); li.appendChild(du);
+      ul.appendChild(li);
+    });
+    $("today-empty").hidden = lista.length > 0;
+  }
+
+  /* ---------- Render: relatório ---------- */
+  function intervalo() {
+    var agora = new Date(), ini, fim;
+    if (periodo === "hoje") { ini = inicioDia(+agora); fim = proximoDia(ini); }
+    else if (periodo === "semana") {
+      var d = new Date(inicioDia(+agora));
+      var desl = (d.getDay() + 6) % 7; // semana começa à segunda-feira
+      d.setDate(d.getDate() - desl); ini = d.getTime();
+      var e = new Date(ini); e.setDate(e.getDate() + 7); fim = e.getTime();
+    } else if (periodo === "mes") {
+      ini = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
+      fim = new Date(agora.getFullYear(), agora.getMonth() + 1, 1).getTime();
+    } else {
+      ini = new Date(agora.getFullYear(), agora.getMonth() - 1, 1).getTime();
+      fim = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime();
+    }
+    var dias = [];
+    for (var t = ini; t < fim; t = proximoDia(t)) dias.push(chaveDia(t));
+    return { ini: ini, fim: fim, dias: dias };
+  }
+
+  function dadosRelatorio() {
+    var r = intervalo(), tot = vazio(), linhas = [], trabalhados = 0;
+    r.dias.forEach(function (k) {
+      var t = totaisDia(k, true);
+      tot.uber += t.uber; tot.bolt += t.bolt; tot.pausa += t.pausa;
+      if (t.uber + t.bolt > 0) trabalhados++;
+      linhas.push({ k: k, t: t });
+    });
+    return { r: r, tot: tot, linhas: linhas, trabalhados: trabalhados };
+  }
+
+  function caixaTotal(rotulo, valor, cls, extra, nota) {
+    var div = document.createElement("div"); div.className = "tot" + (cls ? " " + cls : "");
+    var k = document.createElement("span"); k.className = "label k";
+    if (extra) { var sw = document.createElement("i"); sw.className = "sw " + extra; k.appendChild(sw); }
+    k.appendChild(document.createTextNode(rotulo));
+    var v = document.createElement("span"); v.className = "v"; v.textContent = valor;
+    div.appendChild(k); div.appendChild(v);
+    if (nota) { var x = document.createElement("span"); x.className = "x"; x.textContent = nota; div.appendChild(x); }
+    return div;
+  }
+
+  function renderRelatorio() {
+    document.querySelectorAll(".chip").forEach(function (c) { c.setAttribute("aria-pressed", c.dataset.per === periodo ? "true" : "false"); });
+    var D = dadosRelatorio();
+    var ult = D.r.dias[D.r.dias.length - 1];
+    $("rel-range").textContent = D.r.dias.length === 1 ? dataLonga(D.r.ini) : dataCurta(D.r.dias[0]) + " a " + dataCurta(ult);
+
+    var cond = D.tot.uber + D.tot.bolt;
+    var box = $("rel-totals"); box.textContent = "";
+    box.appendChild(caixaTotal("Total a conduzir", dur(cond), "main", null,
+      D.trabalhados ? "Média de " + dur(cond / D.trabalhados) + " por dia trabalhado" : "Ainda sem horas neste período"));
+    box.appendChild(caixaTotal("Uber", dur(D.tot.uber), "", "t-uber"));
+    box.appendChild(caixaTotal("Bolt", dur(D.tot.bolt), "", "t-bolt"));
+    box.appendChild(caixaTotal("Pausas", dur(D.tot.pausa), "", "t-pausa"));
+    box.appendChild(caixaTotal("Dias trabalhados", String(D.trabalhados)));
+
+    renderGrafico(D.linhas);
+    renderTabela(D);
+  }
+
+  function renderGrafico(linhas) {
+    var NS = "http://www.w3.org/2000/svg";
+    var n = linhas.length, W = Math.max(320, n * 22 + 40), H = 190, padL = 30, padB = 22, padT = 8;
+    var maxH = 0;
+    linhas.forEach(function (l) { maxH = Math.max(maxH, (l.t.uber + l.t.bolt + l.t.pausa) / 3600000); });
+    var topo = Math.max(4, Math.ceil(maxH / 2) * 2);
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Horas por dia, Uber, Bolt e pausas");
+    var areaH = H - padB - padT, colW = (W - padL - 6) / n;
+    function y(h) { return padT + areaH - h / topo * areaH; }
+    for (var g = 0; g <= topo; g += topo <= 8 ? 2 : 4) {
+      var ln = document.createElementNS(NS, "line");
+      ln.setAttribute("x1", padL); ln.setAttribute("x2", W - 4);
+      ln.setAttribute("y1", y(g)); ln.setAttribute("y2", y(g));
+      ln.setAttribute("stroke", "var(--line)"); ln.setAttribute("stroke-width", "1");
+      svg.appendChild(ln);
+      var tx = document.createElementNS(NS, "text");
+      tx.setAttribute("x", padL - 6); tx.setAttribute("y", y(g) + 4);
+      tx.setAttribute("text-anchor", "end"); tx.setAttribute("font-size", "10");
+      tx.setAttribute("fill", "var(--muted)"); tx.textContent = g + "h";
+      svg.appendChild(tx);
+    }
+    var cores = { uber: "var(--uber)", bolt: "var(--bolt)", pausa: "var(--pausa)" };
+    var passo = n > 14 ? 3 : 1;
+    linhas.forEach(function (l, i) {
+      var x = padL + i * colW + colW * 0.18, w = colW * 0.64, acum = 0;
+      ["uber", "bolt", "pausa"].forEach(function (a) {
+        var h = l.t[a] / 3600000;
+        if (h <= 0) return;
+        var r = document.createElementNS(NS, "rect");
+        r.setAttribute("x", x); r.setAttribute("width", w);
+        r.setAttribute("y", y(acum + h)); r.setAttribute("height", Math.max(1, y(acum) - y(acum + h)));
+        r.setAttribute("fill", cores[a]);
+        var tt = document.createElementNS(NS, "title"); tt.textContent = dataCurta(l.k) + " · " + NOMES[a] + " " + dur(l.t[a]);
+        r.appendChild(tt);
+        svg.appendChild(r);
+        acum += h;
+      });
+      if (i % passo === 0) {
+        var lb = document.createElementNS(NS, "text");
+        lb.setAttribute("x", x + w / 2); lb.setAttribute("y", H - 6);
+        lb.setAttribute("text-anchor", "middle"); lb.setAttribute("font-size", "10");
+        lb.setAttribute("fill", "var(--muted)");
+        var d = new Date(deChave(l.k));
+        lb.textContent = n <= 7 ? DIAS_SEM[d.getDay()] : String(d.getDate());
+        svg.appendChild(lb);
+      }
+    });
+    var box = $("rel-chart"); box.textContent = ""; box.appendChild(svg);
+  }
+
+  function renderTabela(D) {
+    var tbl = document.createElement("table");
+    var th = document.createElement("thead");
+    th.innerHTML = "<tr><th>Dia</th><th>Uber</th><th>Bolt</th><th>Pausa</th><th>Total</th></tr>";
+    tbl.appendChild(th);
+    var tb = document.createElement("tbody");
+    var algum = false;
+    D.linhas.slice().reverse().forEach(function (l) {
+      var c = l.t.uber + l.t.bolt;
+      if (c + l.t.pausa === 0) return;
+      algum = true;
+      var tr = document.createElement("tr"); tr.className = "day"; tr.tabIndex = 0;
+      [dataCurta(l.k), durCurta(l.t.uber), durCurta(l.t.bolt), durCurta(l.t.pausa), durCurta(c)].forEach(function (v, i) {
+        var td = document.createElement("td"); td.textContent = v;
+        if (i === 4) td.style.fontWeight = "700";
+        if (i === 4 && c > LIMITE_MS) td.style.color = "var(--danger)";
+        tr.appendChild(td);
+      });
+      function alternar() { abertos[l.k] = !abertos[l.k]; renderRelatorio(); }
+      tr.addEventListener("click", alternar);
+      tr.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); alternar(); } });
+      tb.appendChild(tr);
+      if (abertos[l.k]) tb.appendChild(linhaDetalhe(l.k));
+    });
+    if (!algum) {
+      var tr0 = document.createElement("tr"), td0 = document.createElement("td");
+      td0.colSpan = 5; td0.className = "muted"; td0.style.textAlign = "left"; td0.style.whiteSpace = "normal";
+      td0.textContent = "Sem registos neste período. Use os botões do Turno para começar.";
+      tr0.appendChild(td0); tb.appendChild(tr0);
+    }
+    tbl.appendChild(tb);
+    if (algum) {
+      var tf = document.createElement("tfoot"), trf = document.createElement("tr");
+      ["Total", durCurta(D.tot.uber), durCurta(D.tot.bolt), durCurta(D.tot.pausa), durCurta(D.tot.uber + D.tot.bolt)].forEach(function (v) {
+        var td = document.createElement("td"); td.textContent = v; trf.appendChild(td);
+      });
+      tf.appendChild(trf); tbl.appendChild(tf);
+    }
+    var box = $("rel-table"); box.textContent = ""; box.appendChild(tbl);
+  }
+
+  function linhaDetalhe(k) {
+    var tr = document.createElement("tr"); tr.className = "detail";
+    var td = document.createElement("td"); td.colSpan = 5;
+    var ul = document.createElement("ul"); ul.className = "seg-list";
+    periodosDia(k, true).forEach(function (s) {
+      var li = document.createElement("li");
+      var sw = document.createElement("i"); sw.className = "sw t-" + s.a;
+      var nm = document.createElement("span"); nm.textContent = NOMES[s.a] + " " + hora(s.i) + "–" + (s.atual ? "agora" : hora(s.f));
+      var du = document.createElement("b"); du.className = "num"; du.textContent = durCurta(s.f - s.i);
+      li.appendChild(sw); li.appendChild(nm); li.appendChild(du);
+      if (!s.atual) {
+        var bt = document.createElement("button"); bt.type = "button"; bt.className = "del"; bt.textContent = "Apagar";
+        bt.addEventListener("click", function (e) {
+          e.stopPropagation();
+          if (!bt.classList.contains("armed")) { bt.classList.add("armed"); bt.textContent = "Confirmar"; return; }
+          S.dias[k].splice(s.idx, 1);
+          if (!S.dias[k].length) delete S.dias[k];
+          renderRelatorio(); renderTurno();
+          gravarDia(k);
+          toast("Período apagado.");
+        });
+        li.appendChild(bt);
+      } else {
+        li.appendChild(document.createElement("span"));
+      }
+      ul.appendChild(li);
+    });
+    td.appendChild(ul); tr.appendChild(td);
+    return tr;
+  }
+
+  /* ---------- Exportar ---------- */
+  function textoCSV() {
+    var D = dadosRelatorio();
+    var nome = (S.perfil && S.perfil.nome) || "", mat = (S.perfil && S.perfil.matricula) || "";
+    var linhas = ["Motorista;" + nome, "Matrícula;" + mat, "Período;" + $("rel-range").textContent, "",
+      "Data;Atividade;Início;Fim;Minutos"];
+    D.r.dias.forEach(function (k) {
+      periodosDia(k, false).forEach(function (s) {
+        linhas.push(k + ";" + NOMES[s.a] + ";" + hora(s.i) + ";" + hora(s.f) + ";" + Math.round((s.f - s.i) / 60000));
+      });
+    });
+    linhas.push("", "Total Uber (h);" + (D.tot.uber / 3600000).toFixed(2).replace(".", ","),
+      "Total Bolt (h);" + (D.tot.bolt / 3600000).toFixed(2).replace(".", ","),
+      "Total pausas (h);" + (D.tot.pausa / 3600000).toFixed(2).replace(".", ","));
+    return "﻿" + linhas.join("\r\n");
+  }
+  function textoResumo() {
+    var D = dadosRelatorio();
+    var nome = (S.perfil && S.perfil.nome) || "Motorista", mat = (S.perfil && S.perfil.matricula) || "";
+    return nome + (mat ? " · " + mat : "") + "\n" + $("rel-range").textContent + "\n" +
+      "Uber: " + dur(D.tot.uber) + "\nBolt: " + dur(D.tot.bolt) + "\nPausas: " + dur(D.tot.pausa) +
+      "\nTotal a conduzir: " + dur(D.tot.uber + D.tot.bolt) + "\nDias trabalhados: " + D.trabalhados;
+  }
+
+  /* ---------- Interface ---------- */
+  var toastT = null;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+  var fimT = null;
+  function desarmarFim() { var b = $("btn-fim"); b.classList.remove("armed"); $("btn-fim-s").textContent = "Fechar o turno"; clearTimeout(fimT); }
+
+  function mostrar(v) {
+    $("view-turno").hidden = v !== "turno";
+    $("view-rel").hidden = v !== "rel";
+    $("view-perfil").hidden = v !== "perfil";
+    $("view-turno").style.display = v === "turno" ? "grid" : "none";
+    $("view-rel").style.display = v === "rel" ? "grid" : "none";
+    $("view-perfil").style.display = v === "perfil" ? "grid" : "none";
+    document.querySelectorAll(".nav button").forEach(function (b) {
+      if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    if (v === "rel") renderRelatorio();
+    if (v === "perfil") {
+      resumoBackup();
+      $("pf-nome").value = (S.perfil && S.perfil.nome) || "";
+      $("pf-mat").value = (S.perfil && S.perfil.matricula) || "";
+    }
+    window.scrollTo(0, 0);
+    try { sessionStorage.setItem("diario-vista", v); } catch (e) {}
+  }
+
+  function render() {
+    renderTopo();
+    renderTurno();
+    if (!$("view-rel").hidden) renderRelatorio();
+  }
+
+  ["uber", "bolt", "pausa"].forEach(function (a) {
+    $("btn-" + a).addEventListener("click", function () {
+      if (S.estado.atual && S.estado.atual.a === a) return;
+      mudar(a);
+      toast(a === "pausa" ? "Pausa iniciada." : "A contar tempo na " + NOMES[a] + ".");
+    });
+  });
+  $("btn-fim").addEventListener("click", function () {
+    var b = $("btn-fim");
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed"); $("btn-fim-s").textContent = "Toque de novo para confirmar";
+      fimT = setTimeout(desarmarFim, 4000);
+      return;
+    }
+    desarmarFim();
+    mudar(null);
+    toast("Turno terminado.");
+  });
+
+  document.querySelectorAll(".nav button").forEach(function (b) {
+    b.addEventListener("click", function () { mostrar(b.dataset.view); });
+  });
+  document.querySelectorAll(".chip").forEach(function (c) {
+    c.addEventListener("click", function () { periodo = c.dataset.per; abertos = {}; renderRelatorio(); });
+  });
+
+  $("form-perfil").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var nome = $("pf-nome").value.trim().replace(/\s+/g, " ");
+    var mat = $("pf-mat").value.trim().toUpperCase().replace(/\s+/g, "").replace(/[^A-Z0-9]/g, "");
+    var err = $("pf-err");
+    if (!nome) { err.textContent = "Escreva o seu nome."; err.hidden = false; return; }
+    if (mat.length !== 6) { err.textContent = "A matrícula portuguesa tem 6 letras e números, por exemplo AA-00-AA."; err.hidden = false; return; }
+    err.hidden = true;
+    mat = mat.slice(0, 2) + "-" + mat.slice(2, 4) + "-" + mat.slice(4, 6);
+    S.perfil = { nome: nome, matricula: mat };
+    escrever("perfil", { tipo: "perfil", nome: nome, matricula: mat });
+    render();
+    toast("Dados guardados.");
+    mostrar("turno");
+  });
+
+  $("form-add").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var err = $("add-err");
+    var dia = $("add-dia").value, hi = $("add-ini").value, hf = $("add-fim").value;
+    if (!dia || !hi || !hf) { err.textContent = "Preencha o dia, a hora de início e a de fim."; err.hidden = false; return; }
+    var base0 = deChave(dia);
+    var ini = base0 + (+hi.slice(0, 2)) * 3600000 + (+hi.slice(3, 5)) * 60000;
+    var fim = base0 + (+hf.slice(0, 2)) * 3600000 + (+hf.slice(3, 5)) * 60000;
+    if (fim <= ini) fim += 86400000; // terminou depois da meia-noite
+    if (fim > Date.now()) { err.textContent = "O fim não pode ser no futuro."; err.hidden = false; return; }
+    if (fim - ini > 16 * 3600000) { err.textContent = "Um período não pode passar de 16 horas. Verifique as horas."; err.hidden = false; return; }
+    err.hidden = true;
+    var tocados = adicionarPeriodo($("add-tipo").value, ini, fim);
+    render(); renderRelatorio();
+    var p = Promise.resolve();
+    tocados.forEach(function (k) { p = p.then(function () { return gravarDia(k); }); });
+    toast("Período adicionado.");
+  });
+
+  $("btn-csv").addEventListener("click", function () {
+    var nome = "horas-tvde-" + periodo + "-" + chaveDia(Date.now()) + ".csv";
+    descarregar(nome, textoCSV(), "text/csv;charset=utf-8");
+  });
+  $("btn-copy").addEventListener("click", function () { copiar(textoResumo(), "Resumo copiado."); });
+
+  function descarregar(nome, conteudo, tipo) {
+    var url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
+    var a = document.createElement("a");
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    toast("Ficheiro " + nome + " criado.");
+  }
+
+  /* ---------- Cópia de segurança ---------- */
+  function resumoBackup() {
+    var dias = Object.keys(S.dias).sort();
+    var ult = null;
+    try { ult = localStorage.getItem("diario-tvde-ultimo-backup"); } catch (e) {}
+    $("bk-info").textContent = (dias.length ? dias.length + " dias com registos, desde " + dataCurta(dias[0]) + "." : "Ainda sem registos.") +
+      (ult ? " Última cópia: " + dataLonga(+ult) + "." : " Ainda não fez nenhuma cópia.");
+  }
+  $("btn-backup").addEventListener("click", function () {
+    var dados = { app: "diario-tvde", versao: 1, criado: new Date().toISOString(), perfil: S.perfil, estado: S.estado, dias: S.dias };
+    descarregar("diario-tvde-copia-" + chaveDia(Date.now()) + ".json", JSON.stringify(dados), "application/json");
+    try { localStorage.setItem("diario-tvde-ultimo-backup", String(Date.now())); } catch (e) {}
+    resumoBackup();
+  });
+  $("btn-restore").addEventListener("click", function () { $("file-restore").click(); });
+  $("file-restore").addEventListener("change", function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    var leitor = new FileReader();
+    leitor.onload = function () {
+      try {
+        var x = JSON.parse(leitor.result);
+        if (!x || x.app !== "diario-tvde" || typeof x.dias !== "object") throw new Error();
+        S.perfil = x.perfil || S.perfil;
+        S.estado = x.estado || { atual: null, turno: null };
+        S.dias = x.dias || {};
+        guardarLocal(); render(); resumoBackup();
+        toast("Cópia restaurada: " + Object.keys(S.dias).length + " dias de registos.");
+      } catch (e) {
+        toast("Este ficheiro não é uma cópia do Diário TVDE.");
+      }
+    };
+    leitor.readAsText(f);
+    this.value = "";
+  });
+
+  function copiar(txt, msg) {
+    try {
+      navigator.clipboard.writeText(txt).then(function () { toast(msg); }, function () { toast("Não foi possível copiar neste aparelho."); });
+    } catch (e) { toast("Não foi possível copiar neste aparelho."); }
+  }
+
+  /* ---------- Arranque ---------- */
+  lerLocal();
+  $("add-dia").value = chaveDia(Date.now());
+  var vista = "turno";
+  try { vista = sessionStorage.getItem("diario-vista") || "turno"; } catch (e) {}
+  mostrar(S.perfil ? vista : "perfil");
+  render();
+  setInterval(function () { if (S.estado.atual && !$("view-turno").hidden) renderTurno(); }, 1000);
+
+  /* ---------- Funcionar sem internet ---------- */
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+  // Pede ao navegador para não apagar os registos quando falta espaço
+  if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
+})();
+</script>
+</body>
+</html>
